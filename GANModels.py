@@ -22,6 +22,7 @@ class Generator(nn.Module):
         self.embed_dim = embed_dim
         self.patch_size = patch_size
         self.depth = depth
+        self.num_heads = num_heads  # <-- New: store the number of attention heads
         self.attn_drop_rate = attn_drop_rate
         self.forward_drop_rate = forward_drop_rate
         
@@ -30,6 +31,7 @@ class Generator(nn.Module):
         self.blocks = Gen_TransformerEncoder(
                          depth=self.depth,
                          emb_size=self.embed_dim,
+                         num_heads=self.num_heads,  # <-- New: pass num_heads to encoder blocks
                          drop_p=self.attn_drop_rate,
                          forward_drop_p=self.forward_drop_rate
                         )
@@ -66,8 +68,8 @@ class Gen_TransformerEncoderBlock(nn.Sequential):
                 FeedForwardBlock(
                     emb_size, expansion=forward_expansion, drop_p=forward_drop_p),
                 nn.Dropout(drop_p)
-            )
             ))
+        )
 
         
 class Gen_TransformerEncoder(nn.Sequential):
@@ -98,7 +100,7 @@ class MultiHeadAttention(nn.Module):
         scaling = self.emb_size ** (1 / 2)
         att = F.softmax(energy / scaling, dim=-1)
         att = self.att_drop(att)
-        out = torch.einsum('bhal, bhlv -> bhav ', att, values)
+        out = torch.einsum('bhal, bhlv -> bhav', att, values)
         out = rearrange(out, "b h n d -> b n (h d)")
         out = self.projection(out)
         return out
@@ -145,8 +147,8 @@ class Dis_TransformerEncoderBlock(nn.Sequential):
                 FeedForwardBlock(
                     emb_size, expansion=forward_expansion, drop_p=forward_drop_p),
                 nn.Dropout(drop_p)
-            )
             ))
+        )
 
 
 class Dis_TransformerEncoder(nn.Sequential):
@@ -195,10 +197,10 @@ class Discriminator(nn.Sequential):
                  seq_length=8760,        # update the sequence length
                  depth=3, 
                  n_classes=1, 
+                 num_heads=5,            # <-- New: add num_heads as an explicit parameter
                  **kwargs):
         super().__init__(
             PatchEmbedding_Linear(in_channels, patch_size, emb_size, seq_length),
-            Dis_TransformerEncoder(depth, emb_size=emb_size, drop_p=0.5, forward_drop_p=0.5, **kwargs),
+            Dis_TransformerEncoder(depth, emb_size=emb_size, drop_p=0.5, forward_drop_p=0.5, num_heads=num_heads, **kwargs),
             ClassificationHead(emb_size, n_classes)
         )
-        
