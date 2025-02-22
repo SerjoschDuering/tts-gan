@@ -117,12 +117,8 @@ def parse_args():
     parser.add_argument(
         '--channels',
         type=int,
-        default=1,
+        default=3,
         help='number of image channels')
-    # Add a new parameter for the sequence length and set its default to 8760
-    parser.add_argument('--seq_len', type=int, default=8760,
-                        help='Length of the time series sequence (number of time steps)')
-    
     parser.add_argument(
         '--n_critic',
         type=int,

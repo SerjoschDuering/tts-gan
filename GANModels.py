@@ -12,8 +12,9 @@ from torchsummary import summary
 
 
 class Generator(nn.Module):
-    def __init__(self, seq_len=150, patch_size=15, channels=3, num_classes=9, latent_dim=100, embed_dim=10, depth=3,
-                 num_heads=5, forward_drop_rate=0.5, attn_drop_rate=0.5):
+    def __init__(self, seq_len=8760, patch_size=15, channels=1, num_classes=9,
+                 latent_dim=100, embed_dim=10, depth=3, num_heads=5,
+                 forward_drop_rate=0.5, attn_drop_rate=0.5):
         super(Generator, self).__init__()
         self.channels = channels
         self.latent_dim = latent_dim
@@ -28,11 +29,10 @@ class Generator(nn.Module):
         self.pos_embed = nn.Parameter(torch.zeros(1, self.seq_len, self.embed_dim))
         self.blocks = Gen_TransformerEncoder(
                          depth=self.depth,
-                         emb_size = self.embed_dim,
-                         drop_p = self.attn_drop_rate,
+                         emb_size=self.embed_dim,
+                         drop_p=self.attn_drop_rate,
                          forward_drop_p=self.forward_drop_rate
                         )
-
         self.deconv = nn.Sequential(
             nn.Conv2d(self.embed_dim, self.channels, 1, 1, 0)
         )
@@ -169,35 +169,30 @@ class ClassificationHead(nn.Sequential):
 
     
 class PatchEmbedding_Linear(nn.Module):
-    #what are the proper parameters set here?
-    def __init__(self, in_channels = 21, patch_size = 16, emb_size = 100, seq_length = 1024):
-        # self.patch_size = patch_size
+    def __init__(self, in_channels=1, patch_size=16, emb_size=100, seq_length=8760):
         super().__init__()
-        #change the conv2d parameters here
         self.projection = nn.Sequential(
-            Rearrange('b c (h s1) (w s2) -> b (h w) (s1 s2 c)',s1 = 1, s2 = patch_size),
-            nn.Linear(patch_size*in_channels, emb_size)
+            Rearrange('b c (h s1) (w s2) -> b (h w) (s1 s2 c)', s1=1, s2=patch_size),
+            nn.Linear(patch_size * in_channels, emb_size)
         )
         self.cls_token = nn.Parameter(torch.randn(1, 1, emb_size))
         self.positions = nn.Parameter(torch.randn((seq_length // patch_size) + 1, emb_size))
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         b, _, _, _ = x.shape
         x = self.projection(x)
         cls_tokens = repeat(self.cls_token, '() n e -> b n e', b=b)
-        #prepend the cls token to the input
         x = torch.cat([cls_tokens, x], dim=1)
-        # position
         x += self.positions
-        return x        
+        return x    
         
         
 class Discriminator(nn.Sequential):
     def __init__(self, 
-                 in_channels=3,
-                 patch_size=15,
+                 in_channels=1,          # update to 1 channel for one-dimensional data
+                 patch_size=15, 
                  emb_size=50, 
-                 seq_length = 150,
+                 seq_length=8760,        # update the sequence length
                  depth=3, 
                  n_classes=1, 
                  **kwargs):

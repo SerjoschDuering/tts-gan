@@ -12,6 +12,8 @@ def parse_args():
     return opt
 args = parse_args()
 
+args = parse_args()
+
 os.system(f"CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python train_GAN.py \
 -gen_bs 16 \
 -dis_bs 16 \
@@ -55,4 +57,6 @@ os.system(f"CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python train_GAN.py \
 --ema 0.9999 \
 --diff_aug translation,cutout,color \
 --class_name Running \
---exp_name Running")
+--exp_name Running \
+--seq_len {args.seq_len} \
+--channels {args.channels}")
