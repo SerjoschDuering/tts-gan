@@ -211,6 +211,17 @@ def parse_args():
     parser.add_argument('--show', action='store_true',
                         help='show')
     
+    parser.add_argument('--multi_scale', type=bool, default=True, 
+                    help='Enable multi-scale processing in the generator and discriminator')
+    parser.add_argument('--scale_small_factor', type=int, default=4, 
+                        help='Downsampling factor for small-scale branch')
+    parser.add_argument('--scale_med_factor', type=int, default=2, 
+                        help='Downsampling factor for medium-scale branch')
+    parser.add_argument('--res_weight_small', type=float, default=0.1, 
+                        help='Residual weight for the small-scale branch')
+    parser.add_argument('--res_weight_med', type=float, default=0.2, 
+                        help='Residual weight for the medium-scale branch')
+    
     # New: Mixed Precision Training Flag
     parser.add_argument('--fp16', type=str2bool, default=False,
                         help='Enable mixed precision (FP16) training')
