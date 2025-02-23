@@ -8,13 +8,12 @@ The paper has been accepted to publish in the 20th International Conference on A
 Please find the paper [here](https://arxiv.org/abs/2202.02691)
 
 ---
-# Hackathon Additions
 
-# High-Level Overview
+# Hackathon Additions: High-Level Overview
 
 This tweaked TTS-GAN architecture builds on a transformer‐based GAN design and augments it with a conditional autoencoder (with VAE properties) to anonymize long time series data. The overall idea is to first embed real signals into a latent space using an encoder, cluster these latent representations to capture similar patterns, and then use the averaged, cluster‐derived latent conditions to drive a conditional generator. The generator ultimately synthesizes realistic, anonymized signals that capture the key temporal dynamics of the original data without revealing individual identities.
 
-![Screenshot of the TTS-GAN architecture](Screenshot%202025-02-23%20at%209.26.50%20AM.jpg)
+![Screenshot of the TTS-GAN architecture](diagram.jpg)
 
 ---
 
