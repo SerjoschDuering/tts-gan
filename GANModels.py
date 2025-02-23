@@ -10,7 +10,9 @@ from einops import rearrange, reduce, repeat
 from einops.layers.torch import Rearrange, Reduce
 from torchsummary import summary
 
-
+# ----------------------------
+# Generator and associated modules
+# ----------------------------
 class Generator(nn.Module):
     def __init__(self, seq_len=8760, patch_size=15, channels=1, num_classes=9,
                  latent_dim=100, embed_dim=10, depth=3, num_heads=5,
@@ -22,19 +24,19 @@ class Generator(nn.Module):
         self.embed_dim = embed_dim
         self.patch_size = patch_size
         self.depth = depth
-        self.num_heads = num_heads  # <-- New: store the number of attention heads
+        self.num_heads = num_heads  # store the number of attention heads
         self.attn_drop_rate = attn_drop_rate
         self.forward_drop_rate = forward_drop_rate
-        
+
         self.l1 = nn.Linear(self.latent_dim, self.seq_len * self.embed_dim)
         self.pos_embed = nn.Parameter(torch.zeros(1, self.seq_len, self.embed_dim))
         self.blocks = Gen_TransformerEncoder(
-                         depth=self.depth,
-                         emb_size=self.embed_dim,
-                         num_heads=self.num_heads,  # <-- New: pass num_heads to encoder blocks
-                         drop_p=self.attn_drop_rate,
-                         forward_drop_p=self.forward_drop_rate
-                        )
+            depth=self.depth,
+            emb_size=self.embed_dim,
+            num_heads=self.num_heads,
+            drop_p=self.attn_drop_rate,
+            forward_drop_p=self.forward_drop_rate
+        )
         self.deconv = nn.Sequential(
             nn.Conv2d(self.embed_dim, self.channels, 1, 1, 0)
         )
@@ -48,35 +50,18 @@ class Generator(nn.Module):
         output = self.deconv(x.permute(0, 3, 1, 2))
         output = output.view(-1, self.channels, H, W)
         return output
-    
-    
-class Gen_TransformerEncoderBlock(nn.Sequential):
-    def __init__(self,
-                 emb_size,
-                 num_heads=5,
-                 drop_p=0.5,
-                 forward_expansion=4,
-                 forward_drop_p=0.5):
-        super().__init__(
-            ResidualAdd(nn.Sequential(
-                nn.LayerNorm(emb_size),
-                MultiHeadAttention(emb_size, num_heads, drop_p),
-                nn.Dropout(drop_p)
-            )),
-            ResidualAdd(nn.Sequential(
-                nn.LayerNorm(emb_size),
-                FeedForwardBlock(
-                    emb_size, expansion=forward_expansion, drop_p=forward_drop_p),
-                nn.Dropout(drop_p)
-            ))
-        )
 
-        
-class Gen_TransformerEncoder(nn.Sequential):
-    def __init__(self, depth=8, **kwargs):
-        super().__init__(*[Gen_TransformerEncoderBlock(**kwargs) for _ in range(depth)])       
-        
-        
+class ResidualAdd(nn.Module):
+    def __init__(self, fn):
+        super().__init__()
+        self.fn = fn
+
+    def forward(self, x, **kwargs):
+        res = x
+        x = self.fn(x, **kwargs)
+        x += res
+        return x
+
 class MultiHeadAttention(nn.Module):
     def __init__(self, emb_size, num_heads, dropout):
         super().__init__()
@@ -92,7 +77,7 @@ class MultiHeadAttention(nn.Module):
         queries = rearrange(self.queries(x), "b n (h d) -> b h n d", h=self.num_heads)
         keys = rearrange(self.keys(x), "b n (h d) -> b h n d", h=self.num_heads)
         values = rearrange(self.values(x), "b n (h d) -> b h n d", h=self.num_heads)
-        energy = torch.einsum('bhqd, bhkd -> bhqk', queries, keys)  # batch, num_heads, query_len, key_len
+        energy = torch.einsum('bhqd, bhkd -> bhqk', queries, keys)
         if mask is not None:
             fill_value = torch.finfo(torch.float32).min
             energy.mask_fill(~mask, fill_value)
@@ -105,30 +90,42 @@ class MultiHeadAttention(nn.Module):
         out = self.projection(out)
         return out
 
-    
-class ResidualAdd(nn.Module):
-    def __init__(self, fn):
-        super().__init__()
-        self.fn = fn
-
-    def forward(self, x, **kwargs):
-        res = x
-        x = self.fn(x, **kwargs)
-        x += res
-        return x
-    
-    
 class FeedForwardBlock(nn.Sequential):
     def __init__(self, emb_size, expansion, drop_p):
         super().__init__(
             nn.Linear(emb_size, expansion * emb_size),
             nn.GELU(),
             nn.Dropout(drop_p),
-            nn.Linear(expansion * emb_size, emb_size),
+            nn.Linear(expansion * emb_size, emb_size)
         )
 
-        
-        
+class Gen_TransformerEncoderBlock(nn.Sequential):
+    def __init__(self,
+                 emb_size,
+                 num_heads=5,
+                 drop_p=0.5,
+                 forward_expansion=4,
+                 forward_drop_p=0.5):
+        super().__init__(
+            ResidualAdd(nn.Sequential(
+                nn.LayerNorm(emb_size),
+                MultiHeadAttention(emb_size, num_heads, drop_p),
+                nn.Dropout(drop_p)
+            )),
+            ResidualAdd(nn.Sequential(
+                nn.LayerNorm(emb_size),
+                FeedForwardBlock(emb_size, expansion=forward_expansion, drop_p=forward_drop_p),
+                nn.Dropout(drop_p)
+            ))
+        )
+
+class Gen_TransformerEncoder(nn.Sequential):
+    def __init__(self, depth=8, **kwargs):
+        super().__init__(*[Gen_TransformerEncoderBlock(**kwargs) for _ in range(depth)])
+
+# ----------------------------
+# Discriminator and associated modules
+# ----------------------------
 class Dis_TransformerEncoderBlock(nn.Sequential):
     def __init__(self,
                  emb_size=100,
@@ -144,18 +141,15 @@ class Dis_TransformerEncoderBlock(nn.Sequential):
             )),
             ResidualAdd(nn.Sequential(
                 nn.LayerNorm(emb_size),
-                FeedForwardBlock(
-                    emb_size, expansion=forward_expansion, drop_p=forward_drop_p),
+                FeedForwardBlock(emb_size, expansion=forward_expansion, drop_p=forward_drop_p),
                 nn.Dropout(drop_p)
             ))
         )
 
-
 class Dis_TransformerEncoder(nn.Sequential):
     def __init__(self, depth=8, **kwargs):
         super().__init__(*[Dis_TransformerEncoderBlock(**kwargs) for _ in range(depth)])
-        
-        
+
 class ClassificationHead(nn.Sequential):
     def __init__(self, emb_size=100, n_classes=2):
         super().__init__()
@@ -169,7 +163,6 @@ class ClassificationHead(nn.Sequential):
         out = self.clshead(x)
         return out
 
-    
 class PatchEmbedding_Linear(nn.Module):
     def __init__(self, in_channels=1, patch_size=16, emb_size=100, seq_length=8760):
         super().__init__()
@@ -186,21 +179,53 @@ class PatchEmbedding_Linear(nn.Module):
         cls_tokens = repeat(self.cls_token, '() n e -> b n e', b=b)
         x = torch.cat([cls_tokens, x], dim=1)
         x += self.positions
-        return x    
-        
-        
+        return x  
+
 class Discriminator(nn.Sequential):
     def __init__(self, 
-                 in_channels=1,          # update to 1 channel for one-dimensional data
+                 in_channels=1,
                  patch_size=15, 
                  emb_size=50, 
-                 seq_length=8760,        # update the sequence length
+                 seq_length=8760,
                  depth=3, 
                  n_classes=1, 
-                 num_heads=5,            # <-- New: add num_heads as an explicit parameter
+                 num_heads=5,
                  **kwargs):
         super().__init__(
             PatchEmbedding_Linear(in_channels, patch_size, emb_size, seq_length),
             Dis_TransformerEncoder(depth, emb_size=emb_size, drop_p=0.5, forward_drop_p=0.5, num_heads=num_heads, **kwargs),
             ClassificationHead(emb_size, n_classes)
         )
+
+# ----------------------------
+# New: Encoder module integration
+# ----------------------------
+class Encoder(nn.Module):
+    def __init__(self, in_channels=1, 
+                 patch_size=2, 
+                 emb_size=64, 
+                 seq_length=2190,
+                 depth=8, 
+                 num_heads=4, 
+                 latent_dim=1000, 
+                 drop_p=0.1, 
+                 forward_drop_p=0.1):
+        super(Encoder, self).__init__()
+        self.patch_embed = PatchEmbedding_Linear(in_channels, patch_size, emb_size, seq_length)
+        self.transformer = Gen_TransformerEncoder(
+            depth=depth,
+            emb_size=emb_size,
+            num_heads=num_heads,
+            drop_p=drop_p,
+            forward_drop_p=forward_drop_p
+        )
+        # Use einops Reduce layer to aggregate token features and produce a global representation
+        self.reduce = Reduce('b n e -> b e', reduction='mean')
+        self.fc = nn.Linear(emb_size, latent_dim)
+
+    def forward(self, x):
+        tokens = self.patch_embed(x)
+        tokens = self.transformer(tokens)
+        pooled = self.reduce(tokens)
+        latent = self.fc(pooled)
+        return latent
